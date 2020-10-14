@@ -1,58 +1,59 @@
 from random import randint, uniform
 from tkinter import *
 from math import sqrt
+import asyncio
 
 class Ant :
     species = "Formica rufa"
     def __init__(self, size):
         self._x, self._y = randint(0, size), randint(0, size)
         self._food, self._age = 0, 0
-        self._infected, self._alive, self._birth = False, True, False
+        self._infected, self._alive, self._birth = False, True, 0
         self._colour = 'green2'
         self._history = [[] for i in range(3)]
-        self._birthCD = 0
+        self._birthCD, self._recoveryCD = 0, 0
 
-    def update(self, speed, recovery_rate, size):
-        self._birth = False
+    def update(self, speed, recoveryRate, size):
+        self._birth = 0
         if self._birthCD : 
             self._birthCD -= 1
         self._birthRoll()
         self._deathRoll()
         self._infectionRoll()
-        self._recover(recovery_rate)
+        self._recover(recoveryRate)
         self._updateHistory(self._x, self._y)
         self._move(speed, size)
         self._age += 1
         if self._infected : 
             self._colour = 'green4'
-
+    
+    def _updateHistory(self, x, y) : 
+            self._history[-1] = [x,y]
+            for i in range(len(self._history)-1) : 
+                self._history[i] = self._history[i+1]
+    
     def _deathRoll(self) : 
         if self.infected and randint(0,20) < self._age : 
             self._alive = False
 
     def _birthRoll(self) : 
-        if uniform(0,1) > 0.9 and not self._birthCD : 
-            self._birth = True
-            self._birthCD = 5
+        pass
 
     def _infectionRoll(self) : 
         if uniform(0,1) > 0.95 or self._age >= 10 : 
             self._infected = True
+            self._recoveryCD = 1000
 
-    def _updateHistory(self, x, y) : 
-        self._history[-1] = [x,y]
-        for i in range(len(self._history)-1) : 
-            self._history[i] = self._history[i+1]
-
+    def _recover(self, recoveryRate):
+            self._recoveryCD = max(self._recoveryCD - recoveryRate, 0)
+            if self._infected and randint(0, 100) > recoveryRate:
+                self.infected = False
+    
     def _move(self, speed, size):
-        self._x += randint(0, speed) - speed 
-        self._y += randint(0, speed) - speed
+        self._x += randint(-(speed), speed)
+        self._y += randint(-(speed), speed)
         self._x %= size
         self._y %= size
-
-    def _recover(self, recovery_rate):
-        if self._infected and randint(0, 100) > recovery_rate:
-            self.infected = False
 
     @property 
     def x(self) : return self._x
@@ -76,33 +77,75 @@ class Ant :
 class Queen(Ant) : 
     def __init__(self, size) : 
         super().__init__(size)
-        self.colour = 'gold4'       
+        self._colour = 'gold2'       
 
-    def reproduce(self) : 
-        pass
+    def _move(self, speed, size) : 
+        self._x += randint(-(speed//3), speed//3)
+        self._y += randint(-(speed//3), speed//3)
+        self._x %= size
+        self._y %= size
+
+    def _birthRoll(self) : 
+        roll = randint(1,10)
+        if self._age >= 5 and roll > 5 : 
+            self._birth = roll-5
+    
+    def _deathRoll(self) : 
+        if self._age >= 20 and uniform(0,1) > 0.9 and self._infected : 
+            self._alive = False
+
+class Drone(Ant) : 
+    # Primary job is reproduction
+    # Base movement
+    # Dispensible (Low lifespan, high infection rate)
+    def __init__(self, size) : 
+        super().__init__(size) 
+        self._colour = 'magenta3'
+    
+    def _deathRoll(self) : 
+        if (self.infected and randint(5,15) < self._age) or randint(0,40) < self._age : 
+            self._alive = False
+
+    def _birthRoll(self) : 
+        if uniform(0,1) > 0.9 and not self._birthCD : 
+            self._birth = 1
+            self._birthCD = 5
+
+
 
 class Worker(Ant) : 
     def __init__(self, size) : 
         super().__init__(size)
-        self.colour = 'blue'
+        self._colour = 'blue'
 
-    def deathRoll(self) : 
+    def _deathRoll(self) : 
         # The chance of dying as a worker should be higher 
-        if self.infected and randint(0,10) < self._age : 
+        if self.infected and randint(5,15) < self._age : 
             self._alive = False
+
+    def _move(self, speed, size) : 
+        self._x += randint(-(2*speed), 2*speed)
+        self._y += randint(-(2*speed), 2*speed)
+        self._x %= size
+        self._y %= size
+
 
 
 class World :  
     def __init__(self, size, population):
         self._members = []
         self._size = size
-        for i in range(population):
-            self._members.append(Ant(self._size))
+        self._roles = [Queen, Worker, Drone]
+        # 0.04 chance of rolling Queen, 0.36 chance of rolling Worker, 0.60 chance of rolling Drone
+        self.selectRole = lambda : self._roles[min(min(randint(0,19),1)*16,randint(13,20))//8]
+        for i in range(population-1):
+            self._members.append(self.selectRole()(self._size))
+        self._members.append(Queen(self._size))
 
-    def run(self, speed, recovery_rate):
+    def run(self, speed, recoveryRate):
         tempMembers = []
         for member in self._members:
-            member.update(speed, recovery_rate, self._size)
+            member.update(speed, recoveryRate, self._size)
             # check positions of members prior to test for collision. If positive, run collision on both parties.
             for prevMember in tempMembers : 
                 if [prevMember.x, prevMember.y] == [member.x, member.y] : 
@@ -112,12 +155,13 @@ class World :
                 self._members.remove(member)
                 tempMembers.remove(member)
             elif member.birth : 
-                self._members.append(Ant(self._size))
+                self._members.extend([self.selectRole()(self._size) for i in range(member.birth)])
         self.print_world()
     
     def print_world(self):
         for member in self._members:
-            print(f"X: {member.x} Y: {member.y} Infected: {member.infected} Giving birth: {member.birth} Birth cooldown: {member.birthCD}")
+            print(f"X: {member.x} Y: {member.y} Infected: {member.infected} Giving birth: {bool(member.birth)} Birth cooldown: {member.birthCD}")
+            print(f"Members: {len(self._members)}")
 
     def collision(self, e1, e2) : 
         e1.infected, e2.infected = True, True
@@ -133,7 +177,7 @@ class App(Tk) :
 
     def renderScene(self) : 
         self.canvas.delete("all")
-        for member in this_world.members : 
+        for member in thisWorld.members : 
             self.renderAnt(member)
         self.canvas.pack()
 
@@ -145,14 +189,28 @@ class App(Tk) :
                 pass
         self.canvas.create_oval(ant.x-3, ant.y-3, ant.x+3, ant.y+3, outline=ant.colour, activeoutline='red', fill=ant.colour, activefill='red')
 
-if __name__ == "__main__" :
-    size = 800
-    population = 10 
-    app = App(size)
-    this_world = World(size, population)
-    while True:
-        this_world.run(5, 50)
+# Debug - On refresh timer expiring the loop should reset regardless of userRequest status 
+async def main(speed, recoveryRate) : 
+    while True : 
+        thisWorld.run(speed, recoveryRate)
         app.renderScene()
         app.update()
-        if input("[Q] to Quit: ").lower() == 'q':
-            break
+        request = asyncio.create_task(userRequest())
+        await asyncio.sleep(1) 
+        request.cancel()
+        try : 
+            await request 
+        except : 
+            pass
+
+async def userRequest() : 
+    request = input("[Q] to Quit, [P] to Pause: ").lower()
+    if request == 'p' : 
+        await asyncio.shield(input("Press any key to continue..."))
+    elif request == 'q' : 
+        exit()
+
+if __name__ == "__main__" :
+    app = App(800)
+    thisWorld = World(800, 10)
+    asyncio.run(main(5, 50))
