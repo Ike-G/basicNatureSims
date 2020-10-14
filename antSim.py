@@ -8,21 +8,23 @@ class Ant :
         self._x, self._y = randint(0, size), randint(0, size)
         self._food, self._age = 0, 0
         self._infected, self._alive, self._birth = False, True, False
+        self._history = [[] for i in range(3)]
     
-    def move(self, speed, size):
+    def _move(self, speed, size):
         self._x += randint(0, speed) - speed 
         self._y += randint(0, speed) - speed
         self._x %= size
         self._y %= size
 
-    def recover(self, recovery_rate):
+    def _recover(self, recovery_rate):
         if self._infected and randint(0, 100) > recovery_rate:
             self.infected = False
 
     def update(self, speed, recovery_rate, size):
         self._birth = False
-        self.recover(recovery_rate)
-        self.move(speed, size)
+        self._recover(recovery_rate)
+        self._updateHistory(self._x, self._y)
+        self._move(speed, size)
         self._age += 1
 
     def deathRoll(self) : 
@@ -32,7 +34,12 @@ class Ant :
     def birthRoll(self) : 
         if uniform(0,1) > 0.8 : 
             self._birth = True
-            
+
+    def _updateHistory(self, x, y) : 
+        self._history[-1] = [x,y]
+        for i in range(len(self._history)-1) : 
+            self._history[i] = self._history[i+1]
+
 
     @property 
     def x(self) : return self._x
@@ -46,6 +53,22 @@ class Ant :
     def alive(self) : return self._alive
     @property 
     def birth(self) : return self._birth
+    @property 
+    def history(self) : return self._history
+
+class Queen(Ant) : 
+    def __init__(self) : 
+        pass
+
+    def reproduce(self) : 
+        pass
+
+class Worker(Ant) : 
+    def __init__(self) : 
+        pass
+
+    def work(self) : 
+        pass
 
 
 class World :  
@@ -93,9 +116,13 @@ class App(Tk) :
             self.renderAnt(member)
         self.canvas.pack()
 
-
     def renderAnt(self, ant) : 
-        self.canvas.create_oval(ant.x-3, ant.y-3, ant.x+3, ant.y+3,outline='green',activeoutline='red',fill='green',activefill='red')
+        for value in ant.history : 
+            try : 
+                self.canvas.create_oval(value[0]-3, value[1]-3, value[0]+3, value[1]+3, outline='gray', activeoutline='black', fill='gray', activefill='black')
+            except : 
+                pass
+        self.canvas.create_oval(ant.x-3, ant.y-3, ant.x+3, ant.y+3, outline='green', activeoutline='red', fill='green', activefill='red')
 
 if __name__ == "__main__" :
     size = 250
