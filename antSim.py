@@ -12,6 +12,7 @@ class Ant :
         self._colour = 'green2'
         self._history = [[] for i in range(3)]
         self._birthCD, self._recoveryCD = 0, 0
+        self._radius = 3
 
     def update(self, speed, recoveryRate, size):
         self._birth = 0
@@ -28,13 +29,12 @@ class Ant :
             self._colour = 'green4'
     
     def _updateHistory(self, x, y) : 
-            self._history[-1] = [x,y]
-            for i in range(len(self._history)-1) : 
-                self._history[i] = self._history[i+1]
+        self._history[-1] = [x,y]
+        for i in range(len(self._history)-1) : 
+            self._history[i] = self._history[i+1]
     
     def _deathRoll(self) : 
-        if self.infected and randint(0,20) < self._age : 
-            self._alive = False
+        pass
 
     def _birthRoll(self) : 
         pass
@@ -73,11 +73,14 @@ class Ant :
     def colour(self) : return self._colour
     @property
     def birthCD(self) : return self._birthCD
+    @property 
+    def radius(self) : return self._radius
 
 class Queen(Ant) : 
     def __init__(self, size) : 
         super().__init__(size)
-        self._colour = 'gold2'       
+        self._colour = 'gold2'   
+        self._radius = 6    
 
     def _move(self, speed, size) : 
         self._x += randint(-(speed//3), speed//3)
@@ -111,8 +114,6 @@ class Drone(Ant) :
             self._birth = 1
             self._birthCD = 5
 
-
-
 class Worker(Ant) : 
     def __init__(self, size) : 
         super().__init__(size)
@@ -136,35 +137,37 @@ class World :
         self._members = []
         self._size = size
         self._roles = [Queen, Worker, Drone]
+        self._queenPresent = False
         # 0.04 chance of rolling Queen, 0.36 chance of rolling Worker, 0.60 chance of rolling Drone
         self.selectRole = lambda : self._roles[min(min(randint(0,19),1)*16,randint(13,20))//8]
-        for i in range(population-1):
+        for i in range(population):
             self._members.append(self.selectRole()(self._size))
-        self._members.append(Queen(self._size))
-
+            if type(self._members[0]) == Queen : 
+                self._queenPresent = True
+        
     def run(self, speed, recoveryRate):
         tempMembers = []
+        self._queenPresent = False
         for member in self._members:
             member.update(speed, recoveryRate, self._size)
+            if type(member) == Queen : 
+                self._queenPresent = True
             # check positions of members prior to test for collision. If positive, run collision on both parties.
             for prevMember in tempMembers : 
                 if [prevMember.x, prevMember.y] == [member.x, member.y] : 
-                    self.collision(prevMember, member)
+                    prevMember.infected, member.infected = True, True
             tempMembers.append(member)
             if not member.alive : 
                 self._members.remove(member)
                 tempMembers.remove(member)
-            elif member.birth : 
+            elif self._queenPresent : 
                 self._members.extend([self.selectRole()(self._size) for i in range(member.birth)])
-        self.print_world()
+        self.printWorld()
     
-    def print_world(self):
+    def printWorld(self):
         for member in self._members:
             print(f"X: {member.x} Y: {member.y} Infected: {member.infected} Giving birth: {bool(member.birth)} Birth cooldown: {member.birthCD}")
-            print(f"Members: {len(self._members)}")
-
-    def collision(self, e1, e2) : 
-        e1.infected, e2.infected = True, True
+        print(f"Members: {len(self._members)}")
 
     @property 
     def members(self) : return self._members
@@ -184,33 +187,22 @@ class App(Tk) :
     def renderAnt(self, ant) : 
         for value in ant.history : 
             try : 
-                self.canvas.create_oval(value[0]-3, value[1]-3, value[0]+3, value[1]+3, outline='gray', activeoutline='black', fill='gray', activefill='black')
+                self.canvas.create_oval(value[0]-3, value[1]-3, value[0]+3, value[1]+3, outline='gray', activeoutline=ant.colour, fill='gray', activefill=ant.colour)
             except : 
                 pass
-        self.canvas.create_oval(ant.x-3, ant.y-3, ant.x+3, ant.y+3, outline=ant.colour, activeoutline='red', fill=ant.colour, activefill='red')
+        self.canvas.create_oval(ant.x-ant.radius, ant.y-ant.radius, ant.x+ant.radius, ant.y+ant.radius, outline=ant.colour, fill=ant.colour)
 
-# Debug - On refresh timer expiring the loop should reset regardless of userRequest status 
-async def main(speed, recoveryRate) : 
+def main(speed, recoveryRate) : 
     while True : 
-        thisWorld.run(speed, recoveryRate)
         app.renderScene()
+        thisWorld.run(speed, recoveryRate)
         app.update()
-        request = asyncio.create_task(userRequest())
-        await asyncio.sleep(1) 
-        request.cancel()
-        try : 
-            await request 
-        except : 
-            pass
-
-async def userRequest() : 
-    request = input("[Q] to Quit, [P] to Pause: ").lower()
-    if request == 'p' : 
-        await asyncio.shield(input("Press any key to continue..."))
-    elif request == 'q' : 
-        exit()
+        request = input("[Q] to Quit: ")
+        if request.lower() == 'q' : 
+            break
 
 if __name__ == "__main__" :
     app = App(800)
     thisWorld = World(800, 10)
-    asyncio.run(main(5, 50))
+    main(5,50)
+
