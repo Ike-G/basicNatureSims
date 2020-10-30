@@ -1,7 +1,6 @@
 from random import randint, uniform
 from tkinter import *
 from math import sqrt
-import asyncio
 
 class Ant :
     species = "Formica rufa"
@@ -62,7 +61,11 @@ class Ant :
     @property 
     def infected(self) : return self._infected
     @infected.setter
-    def infected(self, value) : self._infected = value
+    def infected(self, value) : 
+        if type(value) == bool : 
+            self._infected = value
+        else : 
+            raise Exception(f"Property infected is of type bool - type {type(value)} is invalid.")
     @property 
     def alive(self) : return self._alive
     @property 
@@ -96,6 +99,8 @@ class Queen(Ant) :
     def _deathRoll(self) : 
         if self._age >= 20 and uniform(0,1) > 0.9 and self._infected : 
             self._alive = False
+    
+    def __str__(self) : return "Queen"
 
 class Drone(Ant) : 
     # Primary job is reproduction
@@ -114,6 +119,8 @@ class Drone(Ant) :
             self._birth = 1
             self._birthCD = 5
 
+    def __str__(self) : return "Drone"
+
 class Worker(Ant) : 
     def __init__(self, size) : 
         super().__init__(size)
@@ -129,6 +136,8 @@ class Worker(Ant) :
         self._y += randint(-(2*speed), 2*speed)
         self._x %= size
         self._y %= size
+
+    def __str__(self) : return "Worker"
 
 
 
@@ -166,7 +175,7 @@ class World :
     
     def printWorld(self):
         for member in self._members:
-            print(f"X: {member.x} Y: {member.y} Infected: {member.infected} Giving birth: {bool(member.birth)} Birth cooldown: {member.birthCD}")
+            print(f"X: {member.x} Y: {member.y} Infected: {member.infected} Giving birth: {bool(member.birth)} Birth cooldown: {member.birthCD} Role: {member.__str__()}")
         print(f"Members: {len(self._members)}")
 
     @property 
